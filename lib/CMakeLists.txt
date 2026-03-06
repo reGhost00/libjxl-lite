@@ -143,9 +143,7 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
   list(APPEND JPEGXL_INTERNAL_FLAGS -Wno-overloaded-virtual)
 endif()
 
-if (JPEGXL_ENABLE_SKCMS)
-  list(APPEND JPEGXL_INTERNAL_FLAGS -DJPEGXL_ENABLE_SKCMS=1)
-endif ()
+list(APPEND JPEGXL_INTERNAL_FLAGS -DJPEGXL_ENABLE_SKCMS=1)
 
 # strips the -internal suffix from all the elements in LIST
 function(strip_internal OUTPUT_VAR LIB_LIST)
@@ -156,17 +154,17 @@ function(strip_internal OUTPUT_VAR LIB_LIST)
   set(${OUTPUT_VAR} ${out_list} PARENT_SCOPE)
 endfunction()
 
-# set variables for jxl_cms.cmake and jxl.cmake
-if(IS_ABSOLUTE "${CMAKE_INSTALL_INCLUDEDIR}")
-    set(PKGCONFIG_TARGET_INCLUDES "${CMAKE_INSTALL_INCLUDEDIR}")
-else()
-    set(PKGCONFIG_TARGET_INCLUDES "\${prefix}/${CMAKE_INSTALL_INCLUDEDIR}")
-endif()
-if(IS_ABSOLUTE "${CMAKE_INSTALL_LIBDIR}")
-    set(PKGCONFIG_TARGET_LIBS "${CMAKE_INSTALL_LIBDIR}")
-else()
-    set(PKGCONFIG_TARGET_LIBS "\${exec_prefix}/${CMAKE_INSTALL_LIBDIR}")
-endif()
+# # set variables for jxl_cms.cmake and jxl.cmake
+# if(IS_ABSOLUTE "${CMAKE_INSTALL_INCLUDEDIR}")
+#     set(PKGCONFIG_TARGET_INCLUDES "${CMAKE_INSTALL_INCLUDEDIR}")
+# else()
+#     set(PKGCONFIG_TARGET_INCLUDES "\${prefix}/${CMAKE_INSTALL_INCLUDEDIR}")
+# endif()
+# if(IS_ABSOLUTE "${CMAKE_INSTALL_LIBDIR}")
+#     set(PKGCONFIG_TARGET_LIBS "${CMAKE_INSTALL_LIBDIR}")
+# else()
+#     set(PKGCONFIG_TARGET_LIBS "\${exec_prefix}/${CMAKE_INSTALL_LIBDIR}")
+# endif()
 
 include(CheckCXXSymbolExists)
 set(PKGCONFIG_CXX_LIB "")
@@ -182,27 +180,4 @@ endif()
 include(jxl_cms.cmake)
 # The jxl library definition.
 include(jxl.cmake)
-
-# Other libraries outside the core jxl library.
-if(JPEGXL_ENABLE_TOOLS OR BUILD_TESTING)
-  include(jxl_extras.cmake)
-endif()
 include(jxl_threads.cmake)
-if (JPEGXL_ENABLE_JPEGLI)
-  include(jpegli.cmake)
-endif()
-
-# For simplicity all the library headers, both source and generated ones, are
-# gathered in the binary folder. There is no distinction on which libraries use
-# which header since it is expected that all developer libraries are available
-# together at build time.
-install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include/jxl
-  DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
-
-# Tests for the jxl library.
-include(jxl_tests.cmake)
-
-if(BUILD_TESTING AND JPEGXL_ENABLE_BENCHMARK)
-  # Google benchmark for the jxl library
-  include(jxl_benchmark.cmake)
-endif()

@@ -192,26 +192,6 @@ target_compile_definitions(jxl_dec-internal INTERFACE -DJXL_STATIC_DEFINE)
 target_compile_definitions(jxl-internal INTERFACE -DJXL_STATIC_DEFINE)
 target_compile_definitions(jxl_dec-internal INTERFACE -DJXL_STATIC_DEFINE)
 
-# TODO(deymo): Move TCMalloc linkage to the tools/ directory since the library
-# shouldn't do any allocs anyway.
-if(JPEGXL_ENABLE_TCMALLOC)
-  pkg_check_modules(TCMallocMinimal REQUIRED IMPORTED_TARGET
-      libtcmalloc_minimal)
-  # tcmalloc 2.8 has concurrency issues that makes it sometimes return nullptr
-  # for large allocs. See https://github.com/gperftools/gperftools/issues/1204
-  # for details.
-  if(TCMallocMinimal_VERSION VERSION_EQUAL 2.8)
-    message(FATAL_ERROR
-        "tcmalloc version 2.8 has a concurrency bug. You have installed "
-        "version ${TCMallocMinimal_VERSION}, please either downgrade tcmalloc "
-        "to version 2.7, upgrade to 2.8.1 or newer or pass "
-        "-DJPEGXL_ENABLE_TCMALLOC=OFF to jpeg-xl cmake line. See the following "
-        "bug for details:\n"
-        "   https://github.com/gperftools/gperftools/issues/1204\n")
-  endif()
-  target_link_libraries(jxl-internal PUBLIC PkgConfig::TCMallocMinimal)
-endif()  # JPEGXL_ENABLE_TCMALLOC
-
 # Public library.
 add_library(jxl ${JPEGXL_INTERNAL_OBJECTS})
 strip_internal(JPEGXL_INTERNAL_SHARED_LIBS JPEGXL_INTERNAL_LIBS)
@@ -231,18 +211,11 @@ set_target_properties(jxl_dec PROPERTIES
   VERSION ${JPEGXL_LIBRARY_VERSION}
   SOVERSION ${JPEGXL_LIBRARY_SOVERSION})
 
-# Check whether the linker support excluding libs
-if (MSVC)
-  # MSVC ignores this flag (with a warning), so CMake thinks it supports that.
-  set(LINKER_EXCLUDE_LIBS_FLAG "")
-  set(LINKER_SUPPORT_EXCLUDE_LIBS FALSE)
-else()
-  set(LINKER_EXCLUDE_LIBS_FLAG "-Wl,--exclude-libs=ALL")
-  include(CheckCSourceCompiles)
-  list(APPEND CMAKE_REQUIRED_LINK_OPTIONS ${LINKER_EXCLUDE_LIBS_FLAG})
-  check_c_source_compiles("int main(){return 0;}" LINKER_SUPPORT_EXCLUDE_LIBS)
-  list(REMOVE_ITEM CMAKE_REQUIRED_LINK_OPTIONS ${LINKER_EXCLUDE_LIBS_FLAG})
-endif()
+set(LINKER_EXCLUDE_LIBS_FLAG "-Wl,--exclude-libs=ALL")
+include(CheckCSourceCompiles)
+list(APPEND CMAKE_REQUIRED_LINK_OPTIONS ${LINKER_EXCLUDE_LIBS_FLAG})
+check_c_source_compiles("int main(){return 0;}" LINKER_SUPPORT_EXCLUDE_LIBS)
+list(REMOVE_ITEM CMAKE_REQUIRED_LINK_OPTIONS ${LINKER_EXCLUDE_LIBS_FLAG})
 
 # Add a jxl.version file as a version script to tag symbols with the
 # appropriate version number. This script is also used to limit what's exposed
@@ -268,14 +241,6 @@ foreach(target IN ITEMS jxl jxl_dec)
   endif()
 endforeach()
 
-# Only install libjxl public library. The libjxl_dec is not installed since it
-# contains symbols also in libjxl which would conflict if programs try to use
-# both.
-install(TARGETS jxl
-  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
-
 # Add a pkg-config file for libjxl.
 set(JPEGXL_LIBRARY_REQUIRES
     "libhwy libbrotlienc libbrotlidec libjxl_cms")
@@ -283,24 +248,13 @@ set(JPEGXL_LIBRARY_REQUIRES
 # MSVCRT bundles math functions so no explicit libm dependency is required
 if (BUILD_SHARED_LIBS)
   set(JPEGXL_REQUIRES_TYPE "Requires.private")
-  if(NOT MSVC AND NOT APPLE)
-    set(JPEGXL_PRIVATE_LIBS "-lm ${PKGCONFIG_CXX_LIB}")
-  endif()
 else()
   set(JPEGXL_REQUIRES_TYPE "Requires")
-  if(NOT MSVC AND NOT APPLE)
+  if(UNIX)
     set(JPEGXL_PUBLIC_LIBS "-lm ${PKGCONFIG_CXX_LIB}")
   endif()
 endif()
 
 set(JPEGXL_LIBRARY_MAIN jxl)
 
-# Fix pkg-config file on MSVC when building static libraries.
-if (MSVC AND NOT BUILD_SHARED_LIBS)
-  set(JPEGXL_LIBRARY_MAIN jxl-static)
-endif()
-
-configure_file("${CMAKE_CURRENT_SOURCE_DIR}/jxl/libjxl.pc.in"
-               "libjxl.pc" @ONLY)
-install(FILES "${CMAKE_CURRENT_BINARY_DIR}/libjxl.pc"
-  DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/jxl/libjxl.pc.in" "libjxl.pc" @ONLY)
