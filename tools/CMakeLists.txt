@@ -10,7 +10,7 @@ set(HEADERS ${CMAKE_CURRENT_SOURCE_DIR}/../lib ${CMAKE_BINARY_DIR}/lib/include)
 set(LIBS jxl jxl_dec jxl_threads jxl_cms Threads::Threads)
 
 if (WIN32)
-    list(APPEND LIBS Comdlg32 Ole32 Shlwapi)
+    list(APPEND LIBS Comdlg32 Ole32 Shlwapi windowscodecs)
 endif()
 
 set(USE_IMAGEMAGICK FALSE)
@@ -26,8 +26,14 @@ if (JXLL_BUILD_WITH_IMAGEMAGICK)
 endif()
 
 if (NOT USE_IMAGEMAGICK)
-    list(APPEND ARGS JXLL_USE_STB)
-    message(STATUS "using stb_image/stb_image_write for image I/O")
+    # Windows uses WIC, others use stb
+    if (WIN32)
+        list(APPEND ARGS JXLL_USE_WIC)
+        message(STATUS "Windows WIC for image I/O")
+    else()
+        list(APPEND ARGS JXLL_USE_STB)
+        message(STATUS "using stb_image/stb_image_write for image I/O")
+    endif()
 endif()
 
 if (JXLL_BUILD_WITH_GUI)
