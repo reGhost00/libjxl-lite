@@ -62,16 +62,19 @@ export CC=clang CXX=clang++
 cd libjxl
 mkdir build
 cd build
-cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF ..
+cmake -DCMAKE_BUILD_TYPE=Release ..
 cmake --build . -- -j$(nproc)
 ```
 
-The encoder/decoder tools will be available in the `build/tools` directory.
+By default this repository now builds a lightweight codec-only profile
+(`JPEGXL_ENABLE_LITE=ON`) intended for integration scenarios (for example game
+engines): no tools, no tests and no install rules are generated.
 
-## <a name="installing"></a> Installing
+To build the full upstream-style feature set, disable the lite profile and
+explicitly configure the features you want:
 
 ```bash
-sudo cmake --install .
+cmake -DCMAKE_BUILD_TYPE=Release -DJPEGXL_ENABLE_LITE=OFF -DBUILD_TESTING=OFF ..
 ```
 
 
