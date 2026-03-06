@@ -3,8 +3,15 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-#include <gtkmm.h>
+#ifdef JXLL_USE_IMAGEMAGICK
 #include <Magick++.h>
+#else
+#define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image.h"
+#include "stb_image_write.h"
+#endif
+#include <gtkmm.h>
 
 #include <jxl/decode.h>
 #include <jxl/decode_cxx.h>
@@ -83,6 +90,7 @@ std::string DefaultOutput(const std::string& input, bool decode) {
   return output;
 }
 
+#ifdef JXLL_USE_IMAGEMAGICK
 bool ImageMagickToPixels(const char* filename, int channels,
                          std::vector<uint8_t>* pixels, uint32_t* xsize,
                          uint32_t* ysize) {
@@ -120,6 +128,59 @@ bool PixelsToImageMagick(const uint8_t* pixels, uint32_t xsize, uint32_t ysize,
     return false;
   }
 }
+#else
+// stb_image implementation
+bool StbImageToPixels(const char* filename, int channels,
+                      std::vector<uint8_t>* pixels, uint32_t* xsize,
+                      uint32_t* ysize) {
+  int width, height, img_channels;
+  uint8_t* data = stbi_load(filename, &width, &height, &img_channels, channels);
+  if (!data) {
+    fprintf(stderr, "Failed to load image: %s\n", filename);
+    return false;
+  }
+  *xsize = static_cast<uint32_t>(width);
+  *ysize = static_cast<uint32_t>(height);
+  const size_t size = static_cast<size_t>(*xsize) * (*ysize) * channels;
+  pixels->assign(data, data + size);
+  stbi_image_free(data);
+  return true;
+}
+
+bool PixelsToStbImage(const uint8_t* pixels, uint32_t xsize, uint32_t ysize,
+                      int channels, const char* filename) {
+  const char* ext = GetFileExtension(filename);
+  int result = 0;
+  
+  if (strcasecmp(ext, "png") == 0) {
+    result = stbi_write_png(filename, xsize, ysize, channels, pixels, xsize * channels);
+  } else if (strcasecmp(ext, "jpg") == 0 || strcasecmp(ext, "jpeg") == 0) {
+    result = stbi_write_jpg(filename, xsize, ysize, channels, pixels, 90);
+  } else if (strcasecmp(ext, "bmp") == 0) {
+    result = stbi_write_bmp(filename, xsize, ysize, channels, pixels);
+  } else if (strcasecmp(ext, "tga") == 0) {
+    result = stbi_write_tga(filename, xsize, ysize, channels, pixels);
+  } else {
+    // Default to PNG
+    std::string png_file = std::string(filename) + ".png";
+    result = stbi_write_png(png_file.c_str(), xsize, ysize, channels, pixels, xsize * channels);
+  }
+  
+  return result == 1;
+}
+
+// Alias stb_image functions to the names used in the code
+inline bool ImageMagickToPixels(const char* filename, int channels,
+                                std::vector<uint8_t>* pixels, uint32_t* xsize,
+                                uint32_t* ysize) {
+  return StbImageToPixels(filename, channels, pixels, xsize, ysize);
+}
+
+inline bool PixelsToImageMagick(const uint8_t* pixels, uint32_t xsize, uint32_t ysize,
+                                int channels, const char* filename) {
+  return PixelsToStbImage(pixels, xsize, ysize, channels, filename);
+}
+#endif
 
 bool DecodeJxl(const std::vector<uint8_t>& jxl_data, int out_channels,
                std::vector<uint8_t>* pixels, uint32_t* xsize, uint32_t* ysize) {
@@ -342,7 +403,9 @@ class GuiWindow : public Gtk::Window {
 }  // namespace
 
 int main(int argc, char* argv[]) {
+#ifdef JXLL_USE_IMAGEMAGICK
   Magick::InitializeMagick(argv[0]);
+#endif
   auto app = Gtk::Application::create("org.libjxl.lite.gui");
   return app->make_window_and_run<GuiWindow>(argc, argv);
 }

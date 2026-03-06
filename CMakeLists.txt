@@ -7,16 +7,14 @@
 # 仅构建编码/解码器，仅支持 x86 msys2 / gcc / clang
 # 使用内置 skcms，不需要安装和测试
 
-cmake_minimum_required(VERSION 3.10)
-
+cmake_minimum_required(VERSION 4.0)
+project(libjxl_lite LANGUAGES C CXX)
 option(JXLL_BUILD_WITH_TOOLS "build tools" ON)
 
 # 强制使用内置库
 set(JPEGXL_ENABLE_SKCMS ON CACHE BOOL "" FORCE)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-
-project(LIBJXL LANGUAGES C CXX)
 
 message(STATUS "CMake version: ${CMAKE_VERSION}")
 message(STATUS "Compiler: C:${CMAKE_C_COMPILER_ID} ${CMAKE_C_COMPILER_VERSION}, C++:${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")

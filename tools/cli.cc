@@ -11,12 +11,13 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <cstdio>
 
-#ifdef HAVE_IMAGEMAGICK
+#ifdef JXLL_USE_IMAGEMAGICK
 #include <Magick++.h>
-#endif
-
-#ifdef HAVE_STB_IMAGE
+#else
+#define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image.h"
 #include "stb_image_write.h"
 #endif
@@ -185,7 +186,7 @@ static bool DecodeJxlProgressive(const uint8_t* jxl_data, size_t jxl_size,
             continue;
         }
         else {
-            fprintf(stderr, "Unknown decoder status: %d\n", status);
+            fprintf(stderr, "Unknown decoder status: %d\n", (int)status);
             return false;
         }
     }
@@ -222,7 +223,7 @@ static bool EncodeJxlProgressive(const uint8_t* pixels, uint32_t xsize, uint32_t
     
     JxlEncoderStatus state = JxlEncoderSetBasicInfo(enc.get(), &basic_info);
     if (JXL_ENC_SUCCESS != state) {
-        fprintf(stderr, "JxlEncoderSetBasicInfo failed: %d src: %u * %u\n", state, xsize, ysize);
+        fprintf(stderr, "JxlEncoderSetBasicInfo failed: static: %d\n", (int)state);
         return false;
     }
     
@@ -288,7 +289,7 @@ static bool EncodeJxlProgressive(const uint8_t* pixels, uint32_t xsize, uint32_t
     *jxl_size = next_out - *jxl_data;
     
     if (JXL_ENC_SUCCESS != process_result) {
-        fprintf(stderr, "JxlEncoderProcessOutput failed with status: %d\n", process_result);
+        fprintf(stderr, "JxlEncoderProcessOutput failed with status: %d\n", (int)process_result);
         free(*jxl_data);
         return false;
     }
@@ -296,7 +297,20 @@ static bool EncodeJxlProgressive(const uint8_t* pixels, uint32_t xsize, uint32_t
     return true;
 }
 
-#ifdef HAVE_IMAGEMAGICK
+// Get file extension
+static const char* GetFileExtension(const char* filename) {
+    const char* dot = strrchr(filename, '.');
+    if (!dot || dot == filename) return "";
+    return dot + 1;
+}
+
+// Check if file is JXL format
+static bool IsJxlFile(const char* filename) {
+    const char* ext = GetFileExtension(filename);
+    return strcasecmp(ext, "jxl") == 0;
+}
+
+#ifdef JXLL_USE_IMAGEMAGICK
 // Convert image to RGBA pixels using ImageMagick
 static bool ImageMagickToPixels(const char* filename, uint8_t** pixels, 
                                   uint32_t* xsize, uint32_t* ysize) {
@@ -388,7 +402,7 @@ static bool ResizeImageMagick(const char* filename, uint32_t target_xsize, uint3
 }
 #endif
 
-#ifdef HAVE_STB_IMAGE
+#ifdef JXLL_USE_STB
 // Convert image to RGBA pixels using stb_image
 static bool StbImageToPixels(const char* filename, uint8_t** pixels, 
                                uint32_t* xsize, uint32_t* ysize) {
@@ -439,18 +453,6 @@ static bool GetStbImageSize(const char* filename, uint32_t* xsize, uint32_t* ysi
 }
 #endif
 
-// Get file extension
-static const char* GetFileExtension(const char* filename) {
-    const char* dot = strrchr(filename, '.');
-    if (!dot || dot == filename) return "";
-    return dot + 1;
-}
-
-// Check if file is JXL format
-static bool IsJxlFile(const char* filename) {
-    const char* ext = GetFileExtension(filename);
-    return strcasecmp(ext, "jxl") == 0;
-}
 
 // Show usage
 static void ShowUsage(const char* program) {
@@ -482,12 +484,12 @@ static bool EncodeToJxl(const char* input, const char* output, float quality) {
         return false;
     }
     
-#ifdef HAVE_IMAGEMAGICK
+#ifdef JXLL_USE_IMAGEMAGICK
     if (!ImageMagickToPixels(input, &pixels, &xsize, &ysize)) {
         fprintf(stderr, "Failed to load image with ImageMagick: %s\n", input);
         return false;
     }
-#elif defined(HAVE_STB_IMAGE)
+#elif defined(JXLL_USE_STB)
     if (!StbImageToPixels(input, &pixels, &xsize, &ysize)) {
         fprintf(stderr, "Failed to load image with stb_image: %s\n", input);
         return false;
@@ -524,7 +526,7 @@ static bool EncodeToJxl(const char* input, const char* output, float quality) {
 
 // Encode animation from multiple images
 static bool EncodeAnimation(const char** inputs, int count, const char* output, float quality) {
-#ifdef HAVE_IMAGEMAGICK
+#ifdef JXLL_USE_IMAGEMAGICK
     if (count < 2) {
         fprintf(stderr, "Animation requires at least 2 images\n");
         return false;
@@ -615,14 +617,14 @@ static bool DecodeFromJxl(const char* input, const char* output) {
     
     free(jxl_data);
     
-#ifdef HAVE_IMAGEMAGICK
+#ifdef JXLL_USE_IMAGEMAGICK
     // Use ImageMagick to write output
     if (!PixelsToImageMagick(pixels, xsize, ysize, output)) {
         fprintf(stderr, "Failed to write output image\n");
         free(pixels);
         return false;
     }
-#elif defined(HAVE_STB_IMAGE)
+#elif defined(JXLL_USE_STB)
     // Use stb_image_write to write output
     if (!PixelsToStbImage(pixels, xsize, ysize, output)) {
         fprintf(stderr, "Failed to write output image\n");
@@ -681,7 +683,7 @@ int main(int argc, char* argv[]) {
     }
     
     // Initialize ImageMagick if available
-#ifdef HAVE_IMAGEMAGICK
+#ifdef JXLL_USE_IMAGEMAGICK
     Magick::InitializeMagick(nullptr);
 #endif
     
