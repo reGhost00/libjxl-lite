@@ -85,4 +85,4 @@ else()
 endif()
 
 set(JPEGXL_THREADS_LIBRARY_REQUIRES "")
-configure_file("${CMAKE_CURRENT_SOURCE_DIR}/threads/libjxl_threads.pc.in" "libjxl_threads.pc" @ONLY)
+# configure_file("${CMAKE_CURRENT_SOURCE_DIR}/threads/libjxl_threads.pc.in" "libjxl_threads.pc" @ONLY)

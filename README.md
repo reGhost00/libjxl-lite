@@ -6,6 +6,7 @@ This is a stripped-down version of [libjxl](https://github.com/libjxl/libjxl), i
 1. Only the core library (encoding/decoding) is retained
 2. Only supports msys2 / gcc / clang under x86
 3. Fixed use of skcms
+4. Remove all install stuff
 
 ## libjxl-lite Tools (this fork)
 1. cli: Command-line encoder/decoder
