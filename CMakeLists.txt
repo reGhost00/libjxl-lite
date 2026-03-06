@@ -73,6 +73,9 @@ add_compile_options(
 # 第三方库
 add_subdirectory(third_party)
 
+# Highway include directories for lib targets.
+set(JXL_HWY_INCLUDE_DIRS "$<BUILD_INTERFACE:$<TARGET_PROPERTY:$<IF:$<TARGET_EXISTS:hwy::hwy>,hwy::hwy,hwy>,INTERFACE_INCLUDE_DIRECTORIES>>")
+
 # lib 目录
 add_subdirectory(lib)
 

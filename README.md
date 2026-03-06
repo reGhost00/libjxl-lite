@@ -73,6 +73,26 @@ To decode a JPEG XL file run:
 djxl input.jxl output.png
 ```
 
+### libjxl-lite tools (this fork)
+
+This fork provides extra test tools under `tools/`:
+
+- `cli`: command-line encode/decode helper
+- `gui`: GTKMM4 GUI for quick encode/decode verification
+
+`gui` uses **ImageMagick** as a fixed image I/O backend and supports:
+
+- encode/decode mode (or auto-detect from extension)
+- output pixel format selection: `RGB` / `RGBA`
+- configurable encoding quality (1-100)
+
+Build example:
+
+```bash
+cmake -S . -B build -DJXLL_BUILD_WITH_TOOLS=ON
+cmake --build build --target gui
+```
+
 When possible, `cjxl`/`djxl` are able to read/write the following image formats:
 OpenEXR (`.exr`), GIF (`.gif`), JPEG (`.jpg`/`.jpeg`), NetPBM (`.pam`/`.pgm`/`.ppm`),
 Portable FloatMap (`.pfm`), PGX Test Format (`.pgx`), Portable Network Graphics (`.png`),
