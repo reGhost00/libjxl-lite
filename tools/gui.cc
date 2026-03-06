@@ -23,6 +23,11 @@
 #include <vector>
 
 namespace {
+constexpr size_t kInitialEncodeBufferSize = 1024 * 1024;
+constexpr int kEffortFastest = 9;
+constexpr int kEffortBalanced = 7;
+constexpr float kQualityMax = 100.0f;
+constexpr float kDistanceMax = 9.0f;
 
 bool ReadFile(const char* filename, std::vector<uint8_t>* data) {
   FILE* file = fopen(filename, "rb");
@@ -188,8 +193,13 @@ bool EncodeJxl(const uint8_t* pixels, uint32_t xsize, uint32_t ysize, int channe
   }
 
   JxlEncoderFrameSettings* frame_settings = JxlEncoderFrameSettingsCreate(enc.get(), nullptr);
-  const int effort = std::clamp(9 - static_cast<int>(quality / 100.0f * 8.0f), 1, 9);
+  const int effort = std::clamp(kEffortBalanced, 1, kEffortFastest);
+  const float clamped_quality = std::clamp(quality, 1.0f, kQualityMax);
+  const float distance = (kQualityMax - clamped_quality) / kQualityMax * kDistanceMax;
   JxlEncoderFrameSettingsSetOption(frame_settings, JXL_ENC_FRAME_SETTING_EFFORT, effort);
+  if (JXL_ENC_SUCCESS != JxlEncoderSetFrameDistance(frame_settings, distance)) {
+    return false;
+  }
 
   const size_t bytes = static_cast<size_t>(xsize) * ysize * channels;
   if (JXL_ENC_SUCCESS != JxlEncoderAddImageFrame(frame_settings, &format, pixels, bytes)) {
@@ -197,7 +207,7 @@ bool EncodeJxl(const uint8_t* pixels, uint32_t xsize, uint32_t ysize, int channe
   }
   JxlEncoderCloseInput(enc.get());
 
-  jxl_data->assign(1024 * 1024, 0);
+  jxl_data->assign(kInitialEncodeBufferSize, 0);
   uint8_t* next_out = jxl_data->data();
   size_t avail_out = jxl_data->size();
   JxlEncoderStatus status = JXL_ENC_NEED_MORE_OUTPUT;

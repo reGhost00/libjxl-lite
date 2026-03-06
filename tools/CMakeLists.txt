@@ -30,7 +30,7 @@ target_include_directories(cli PRIVATE
     ${CMAKE_BINARY_DIR}/lib/include
 )
 
-if (ImageMagick_Magick++_FOUND AND GTKMM4_FOUND)
+if ("${ImageMagick_Magick++_FOUND}" AND "${GTKMM4_FOUND}")
     add_executable(gui gui.cc)
     set_target_properties(gui PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED YES)
     target_link_libraries(gui PRIVATE
