@@ -25,5 +25,5 @@ tools/conformance/__pycache__
 # macOS Finder state files
 .DS_Store
 *.bak
-*_old
-*_del
+**/*_del
+**/*_old
