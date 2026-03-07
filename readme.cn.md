@@ -1,6 +1,6 @@
 # JPEG XL reference implementation
 
-<img src="doc/jxl.svg" width="100" align="right" alt="JXL logo">
+<img src="assets/jxl.svg" width="100" align="right" alt="JXL logo">
 
 这是 [libjxl](https://github.com/libjxl/libjxl) 的精简版，用于给需要以子模块方式嵌入项目的更轻量级选择
 

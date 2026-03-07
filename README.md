@@ -1,6 +1,6 @@
 # JPEG XL reference implementation
 
-<img src="doc/jxl.svg" width="100" align="right" alt="JXL logo">
+<img src="assets/jxl.svg" width="100" align="right" alt="JXL logo">
 
 This is a stripped-down version of [libjxl](https://github.com/libjxl/libjxl), intended for projects that need a lightweight option to include as a submodule.
 1. Only the core library (encoding/decoding) is retained

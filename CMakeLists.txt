@@ -11,7 +11,6 @@ cmake_minimum_required(VERSION 4.0)
 project(libjxl_lite LANGUAGES C CXX)
 option(JXLL_BUILD_WITH_TOOLS "build tools" ON)
 
-# 强制使用内置库
 set(JPEGXL_ENABLE_SKCMS ON CACHE BOOL "" FORCE)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
@@ -19,36 +18,36 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 message(STATUS "CMake version: ${CMAKE_VERSION}")
 message(STATUS "Compiler: C:${CMAKE_C_COMPILER_ID} ${CMAKE_C_COMPILER_VERSION}, C++:${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
 message(STATUS "System: ${CMAKE_SYSTEM_NAME}, Processor: ${CMAKE_SYSTEM_PROCESSOR}")
-
-# 静态库
+#
+# focus static library, no install rules
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(CMAKE_SKIP_INSTALL_RULES ON CACHE BOOL "" FORCE)
 
-# 检查编译器是否支持的目标
-include(CheckCXXCompilerFlag)
-check_cxx_compiler_flag("-mavx2" CXX_MAVX2_SUPPORTED)
-check_cxx_compiler_flag("-mf16c" CXX_MF16C_SUPPORTED)
-check_cxx_compiler_flag("-mavx512f" CXX_MAVX512F_SUPPORTED)
-check_cxx_compiler_flag("-mavx512dq" CXX_MAVX512DQ_SUPPORTED)
-check_cxx_compiler_flag("-mavx512cd" CXX_MAVX512CD_SUPPORTED)
-check_cxx_compiler_flag("-mavx512bw" CXX_MAVX512BW_SUPPORTED)
-check_cxx_compiler_flag("-mavx512vl" CXX_MAVX512VL_SUPPORTED)
+if (NOT JXLL_FEATURE_DETECTED)
+    include(CheckCXXCompilerFlag)
+    check_cxx_compiler_flag("-mavx2" CXX_MAVX2_SUPPORTED)
+    check_cxx_compiler_flag("-mf16c" CXX_MF16C_SUPPORTED)
+    check_cxx_compiler_flag("-mavx512f" CXX_MAVX512F_SUPPORTED)
+    check_cxx_compiler_flag("-mavx512dq" CXX_MAVX512DQ_SUPPORTED)
+    check_cxx_compiler_flag("-mavx512cd" CXX_MAVX512CD_SUPPORTED)
+    check_cxx_compiler_flag("-mavx512bw" CXX_MAVX512BW_SUPPORTED)
+    check_cxx_compiler_flag("-mavx512vl" CXX_MAVX512VL_SUPPORTED)
 
-check_cxx_compiler_flag(-std=c++17 LIB_HAVE_CXX17_FLAG)
-if (LIB_HAVE_CXX17_FLAG)
-  set(CMAKE_CXX_STANDARD 17)
-  check_cxx_compiler_flag(-std=c++26 LIB_HAVE_CXX26_FLAG)
-  if (LIB_HAVE_CXX26_FLAG)
-    set(CMAKE_CXX_STANDARD 26)
-  endif()
-  set(CMAKE_CXX_STANDARD_REQUIRED YES)
+    check_cxx_compiler_flag(-std=c++17 JXLL_HAVE_CXX17_FLAG)
+    if (JXLL_HAVE_CXX17_FLAG)
+       check_cxx_compiler_flag(-std=c++26 LIB_HAVE_CXX26_FLAG)
+    endif()
+    set(JXLL_FEATURE_DETECTED ON CACHE BOOL "Feature detection completed")
 endif()
 
-# 线程支持
+if (LIB_HAVE_CXX26_FLAG)
+    set(CMAKE_CXX_STANDARD 26)
+else()
+    set(CMAKE_CXX_STANDARD 17)
+endif()
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(THREADS_PREFER_PTHREAD_FLAG YES)
 find_package(Threads REQUIRED)
-
-# Atomics 支持
 find_package(Atomics REQUIRED)
 
 # CMAKE_EXPORT_COMPILE_COMMANDS
