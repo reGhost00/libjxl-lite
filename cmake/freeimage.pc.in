@@ -1,0 +1,16 @@
+# FreeImage pkg-config template
+# Copy this file to your desired location (e.g., C:/ucrt64/lib/pkgconfig/freeimage.pc)
+# Then set the environment variable FREEIMAGE_PKG_CONFIG_PATH to the directory containing this file
+# Example: setx FREEIMAGE_PKG_CONFIG_PATH "C:\ucrt64\lib\pkgconfig"
+
+prefix=@FREEIMAGE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+libdir=@FREEIMAGE_INSTALL_LIB_DIR@
+includedir=@FREEIMAGE_INSTALL_INCLUDE_DIR@
+
+Name: FreeImage
+Description: FreeImage is an Open Source library project for developers who would like to support popular graphics image formats.
+Version: @FREEIMAGE_VERSION@
+Libs: -L${libdir} -lfreeimage
+Libs.private: -L${libdir} -lfreeimageplus
+Cflags: -I${includedir}

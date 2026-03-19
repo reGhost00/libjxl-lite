@@ -14,9 +14,9 @@
 
 #include <cstdio>
 
-#ifdef JXLL_USE_IMAGEMAGICK
+#ifdef JXLL_BUILD_WITH_IMAGEMAGICK
 #include <Magick++.h>
-#elif defined(JXLL_USE_WIC)
+#elif defined(JXLL_BUILD_WITH_WIC)
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <shcore.h>
@@ -326,7 +326,7 @@ static bool IsJxlFile(const char* filename) {
   return strcasecmp(ext, "jxl") == 0;
 }
 
-#ifdef JXLL_USE_WIC
+#ifdef JXLL_BUILD_WITH_WIC
 static bool WicToPixels(const char* filename, uint8_t** pixels, uint32_t* xsize,
                         uint32_t* ysize) {
   HRESULT hr;
@@ -508,7 +508,7 @@ static bool GetWicImageSize(const char* filename, uint32_t* xsize,
 }
 #endif
 
-#ifdef JXLL_USE_IMAGEMAGICK
+#ifdef JXLL_BUILD_WITH_IMAGEMAGICK
 // Convert image to RGBA pixels using ImageMagick
 static bool ImageMagickToPixels(const char* filename, uint8_t** pixels,
                                 uint32_t* xsize, uint32_t* ysize) {
@@ -599,7 +599,7 @@ static bool ResizeImageMagick(const char* filename, uint32_t target_xsize,
 }
 #endif
 
-#ifdef JXLL_USE_STB
+#ifdef JXLL_BUILD_WITH_STB
 // Convert image to RGBA pixels using stb_image
 static bool StbImageToPixels(const char* filename, uint8_t** pixels,
                              uint32_t* xsize, uint32_t* ysize) {
@@ -682,17 +682,17 @@ static bool EncodeToJxl(const char* input, const char* output, float quality) {
     return false;
   }
 
-#ifdef JXLL_USE_IMAGEMAGICK
+#ifdef JXLL_BUILD_WITH_IMAGEMAGICK
   if (!ImageMagickToPixels(input, &pixels, &xsize, &ysize)) {
     fprintf(stderr, "Failed to load image with ImageMagick: %s\n", input);
     return false;
   }
-#elif defined(JXLL_USE_WIC)
+#elif defined(JXLL_BUILD_WITH_WIC)
   if (!WicToPixels(input, &pixels, &xsize, &ysize)) {
     fprintf(stderr, "Failed to load image with WIC: %s\n", input);
     return false;
   }
-#elif defined(JXLL_USE_STB)
+#elif defined(JXLL_BUILD_WITH_STB)
   if (!StbImageToPixels(input, &pixels, &xsize, &ysize)) {
     fprintf(stderr, "Failed to load image with stb_image: %s\n", input);
     return false;
@@ -734,7 +734,7 @@ static bool EncodeToJxl(const char* input, const char* output, float quality) {
 // Encode animation from multiple images
 static bool EncodeAnimation(const char** inputs, int count, const char* output,
                             float quality) {
-#ifdef JXLL_USE_IMAGEMAGICK
+#ifdef JXLL_BUILD_WITH_IMAGEMAGICK
   if (count < 2) {
     fprintf(stderr, "Animation requires at least 2 images\n");
     return false;
@@ -830,20 +830,20 @@ static bool DecodeFromJxl(const char* input, const char* output) {
 
   free(jxl_data);
 
-#ifdef JXLL_USE_IMAGEMAGICK
+#ifdef JXLL_BUILD_WITH_IMAGEMAGICK
   // Use ImageMagick to write output
   if (!PixelsToImageMagick(pixels, xsize, ysize, output)) {
     fprintf(stderr, "Failed to write output image\n");
     free(pixels);
     return false;
   }
-#elif defined(JXLL_USE_WIC)
+#elif defined(JXLL_BUILD_WITH_WIC)
   if (!PixelsToWic(pixels, xsize, ysize, output)) {
     fprintf(stderr, "Failed to write output image\n");
     free(pixels);
     return false;
   }
-#elif defined(JXLL_USE_STB)
+#elif defined(JXLL_BUILD_WITH_STB)
   // Use stb_image_write to write output
   if (!PixelsToStbImage(pixels, xsize, ysize, output)) {
     fprintf(stderr, "Failed to write output image\n");
@@ -900,7 +900,7 @@ int main(int argc, char* argv[]) {
   }
 
   // Initialize ImageMagick if available
-#ifdef JXLL_USE_IMAGEMAGICK
+#ifdef JXLL_BUILD_WITH_IMAGEMAGICK
   Magick::InitializeMagick(nullptr);
 #endif
 

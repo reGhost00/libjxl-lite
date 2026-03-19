@@ -27,3 +27,7 @@ Please note that the PATENTS file only mentions Google since Google is the legal
 entity receiving the Contributor License Agreements (CLA) from all contributors
 to the JPEG XL Project, including the initial main contributors to the JPEG XL
 format: Cloudinary and Google.
+
+2026-3-9
+Session   Separate build targets for wrap and libjxl to avo…
+Continue  opencode -s ses_32f34a17effehKFUYbspuIo6lc
