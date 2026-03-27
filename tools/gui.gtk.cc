@@ -27,6 +27,7 @@
 #define G_LOG_DOMAIN "App"
 
 #include <exiv2/exiv2.hpp>
+#include <gio/gio.h>
 #include <gtkmm.h>
 #define DEF_WINDOW_WIDTH 600
 #define DEF_WINDOW_HEIGHT 400
@@ -779,6 +780,19 @@ static std::optional<std::vector<Frame>> comm_read_bitmap_core(const uint8_t* bu
 #include <functional>
 #include <immintrin.h>
 
+struct FreeImageGuard {
+    FreeImageGuard()
+    {
+        FreeImage_Initialise(TRUE);
+    }
+    ~FreeImageGuard()
+    {
+        FreeImage_DeInitialise();
+    }
+};
+
+#define LibraryGuard FreeImageGuard guard;
+
 struct CoverArgs {
     const uint8_t* src = nullptr;
     uint8_t* dst = nullptr;
@@ -950,103 +964,63 @@ struct FIBitmapGuard {
     }
 };
 
-static bool freeimage_read_bitmap_core(const Glib::RefPtr<Gio::File>& file, std::vector<Bitmap>& frames, Glib::RefPtr<Gio::Cancellable> cancellable)
+static bool freeimage_read_from_memory(const uint8_t* buff, size_t size, const char* path, std::vector<Frame>& frames)
 {
-    // 1. 加载文件内容 - RAII自动管理
-    char* buff_raw = nullptr;
-    size_t size = 0;
-    if (!file->load_contents(cancellable, buff_raw, size)) {
-        return false;
-    }
-    BuffWrap buff(buff_raw);
-
-    // 2. 打开内存流 - RAII自动管理
-    FIMemoryGuard hmem(FreeImage_OpenMemory(reinterpret_cast<BYTE*>(buff.get()), size));
+    // 1. 打开内存流 - RAII自动管理
+    FIMemoryGuard hmem(FreeImage_OpenMemory(const_cast<BYTE*>(buff), size));
     if (!hmem) {
         return false;
     }
 
-    // 3. 检测文件格式
+    // 2. 检测文件格式
     FREE_IMAGE_FORMAT fif = FreeImage_GetFileTypeFromMemory(hmem.get(), 0);
     if (FIF_UNKNOWN == fif) {
-        fif = FreeImage_GetFileType(file->get_path().c_str(), 0);
+        fif = FreeImage_GetFileType(path, 0);
     }
     if (FIF_UNKNOWN == fif) {
         return false;
     }
 
-    // 4. 加载位图 - RAII自动管理
+    // 3. 加载位图 - RAII自动管理
     FIBitmapGuard dib(FreeImage_LoadFromMemory(fif, hmem.get(), 0));
     if (!dib) {
         return false;
     }
 
-    // 5. 确保是32位
+    // 4. 确保是32位
     if (32 != FreeImage_GetBPP(dib.get())) {
         if (!dib.convertTo32Bits()) {
             return false;
         }
     }
 
-    // 6. 提取图像数据
+    // 5. 提取图像数据
     uint32_t width = FreeImage_GetWidth(dib.get());
     uint32_t height = FreeImage_GetHeight(dib.get());
-    Bitmap bmp(ImageType::UNKNOWN, width, height, file->get_path());
+    uint8_t* pixelData = g_new(uint8_t, width * height * 4);
 
-    // 7. 颜色空间转换 (BGRA -> RGBA)
-    CoverArgs args { FreeImage_GetBits(dib.get()), bmp.bitmap, width, height, FreeImage_GetPitch(dib.get()) };
+    // 6. 颜色空间转换 (BGRA -> RGBA)
+    CoverArgs args { FreeImage_GetBits(dib.get()), pixelData, width, height, FreeImage_GetPitch(dib.get()) };
+    coverToRGBA(args);
 
-    // 设置图像类型
-    switch (fif) {
-    case FIF_BMP:
-        bmp.type = ImageType::BMP;
-        break;
-    case FIF_DDS:
-        bmp.type = ImageType::DDS;
-        break;
-    case FIF_GIF:
-        bmp.type = ImageType::GIF;
-        break;
-    case FIF_JPEG:
-        bmp.type = ImageType::JPEG;
-        break;
-    case FIF_PNG:
-        bmp.type = ImageType::PNG;
-        break;
-    case FIF_TIFF:
-        bmp.type = ImageType::TIFF;
-        break;
-    case FIF_WEBP:
-        bmp.type = ImageType::WEBP;
-        break;
-    default:
-        break;
-    }
-
-    // 执行颜色转换
-    bool rev = (coverToRGBA(args) != nullptr);
-    if (!rev) {
-        return false;
-    }
-
-    // 8. 读取 EXIF 并保存结果
-    bmp.metadata = Metadata(bmp.path.c_str());
-    frames.push_back(std::move(bmp));
-
+    Frame frame(path, pixelData, width, height);
+    frames.push_back(std::move(frame));
     return true;
 }
 
-static bool freeimage_write_bitmap_core(const Frame& frame, Glib::RefPtr<Gio::File> file, uint32_t quality, Glib::RefPtr<Gio::Cancellable>& cancellable)
+static bool freeimage_write_bitmap_core(const Frame& frame, GFile* file, uint32_t quality, GCancellable* cancellable)
 {
-    if (!(frame.byte && frame.width && frame.height))
+    if (!(frame.pixels && frame.width && frame.height))
         return false;
-    if (!(ImageType::BMP == frame.type || ImageType::JPEG == frame.type || ImageType::PNG == frame.type)) {
+    const char* path = g_file_peek_path(file);
+    ImageType type = comm_get_type_from_path(path);
+    if (!(ImageType::BMP == type || ImageType::JPEG == type || ImageType::PNG == type)) {
         g_warning("Unsupported image type for FreeImage write");
         return false;
     }
 
     gsize pixelSize = 0;
-    const void* pixels = frame.byte->get_data(pixelSize);
+    const void* pixels = frame.pixels->get_data(pixelSize);
     if (pixelSize < frame.width * frame.height * 4)
         return false;
 
@@ -1056,16 +1030,23 @@ static bool freeimage_write_bitmap_core(const Frame& frame, Glib::RefPtr<Gio::Fi
     FIBitmapGuard guard(dib);
 
     FREE_IMAGE_FORMAT fif = FIF_UNKNOWN;
-    if (ImageType::BMP == frame.type)
+    if (ImageType::BMP == type)
         fif = FIF_BMP;
-    else if (ImageType::JPEG == frame.type)
+    else if (ImageType::JPEG == type)
         fif = FIF_JPEG;
-    else if (ImageType::PNG == frame.type)
+    else if (ImageType::PNG == type)
         fif = FIF_PNG;
 
+    int saveFlags = 0;
     if (fif == FIF_JPEG && quality > 0) {
-        int q = std::clamp(static_cast<int>(quality * 100 / 9), 1, 100);
-        FreeImage_SetParameter(dib, FIBIP_JPEG_QUALITY, q);
+        if (quality >= 8)
+            saveFlags = JPEG_QUALITYSUPERB;
+        else if (quality >= 5)
+            saveFlags = JPEG_QUALITYGOOD;
+        else if (quality >= 3)
+            saveFlags = JPEG_QUALITYNORMAL;
+        else
+            saveFlags = JPEG_QUALITYAVERAGE;
     }
 
     FIMEMORY* mem = FreeImage_OpenMemory(nullptr, 0);
@@ -1073,7 +1054,7 @@ static bool freeimage_write_bitmap_core(const Frame& frame, Glib::RefPtr<Gio::Fi
         return false;
     FIMemoryGuard memGuard(mem);
 
-    if (!FreeImage_SaveToMemory(fif, dib, mem, 0))
+    if (!FreeImage_SaveToMemory(fif, dib, mem, saveFlags))
         return false;
 
     BYTE* data = nullptr;
@@ -1082,56 +1063,62 @@ static bool freeimage_write_bitmap_core(const Frame& frame, Glib::RefPtr<Gio::Fi
     if (!data || !size)
         return false;
 
-    try {
-        auto stream = file->replace(cancellable);
-        if (!stream)
-            return false;
-        stream->write(data, size, cancellable);
-        return true;
-    } catch (const Glib::Error& ex) {
-        g_warning("FreeImage write error: %s", ex.what());
+    GError* err = NULL;
+    bool succ = g_file_replace_contents(file, (const char*)data, size, NULL, FALSE, G_FILE_CREATE_NONE, NULL, cancellable, &err);
+    if (!succ) {
+        g_warning("FreeImage write error: %s", err ? err->message : "Unknown error");
+        g_error_free(err);
         return false;
     }
+    return true;
 }
 
-#define comm_read_bitmap_core(file, quality, cancellable) freeimage_read_bitmap_core(file, quality, cancellable)
+static std::optional<std::vector<Frame>> comm_read_bitmap_core(const uint8_t* buff, size_t size, const char* path, GCancellable* cancellable)
+{
+    std::vector<Frame> frames;
+    if (!freeimage_read_from_memory(buff, size, path, frames)) {
+        return std::nullopt;
+    }
+    GError* err = NULL;
+    frames[0].meta = Metadata::create(buff, size, &err);
+    if (err) {
+        g_warning("Failed to read metadata: %s", err->message);
+        g_error_free(err);
+    }
+    return frames;
+}
+
 #define comm_write_bitmap_core(frame, file, quality, cancellable) freeimage_write_bitmap_core(frame, file, quality, cancellable)
 #define comm_write_bitmap_animation_core(frames, file, quality, cancellable) false
 #elif defined(JXLL_BUILD_WITH_IMAGEMAGICK)
 #include <Magick++.h>
 
-static bool imagick_read_bitmap_core(const Glib::RefPtr<Gio::File>& file, std::vector<Bitmap>& frames, Glib::RefPtr<Gio::Cancellable> cancellable)
+struct ImageMagickGuard {
+    ImageMagickGuard()
+    {
+        Magick::InitializeMagick(nullptr);
+    }
+    ~ImageMagickGuard()
+    {
+    }
+};
+
+#define LibraryGuard ImageMagickGuard guard;
+
+static bool imagick_read_from_memory(const uint8_t* buff, size_t size, const char* path, std::vector<Frame>& frames)
 {
+    LibraryGuard;
+    Magick::Blob blob(buff, size);
     try {
-        const char* path = file->get_path().c_str();
-        Magick::Image image(path);
+        Magick::Image image(blob);
         size_t width = image.columns();
         size_t height = image.rows();
 
-        Bitmap bmp(ImageType::UNKNOWN, static_cast<uint32_t>(width), static_cast<uint32_t>(height), path);
+        uint8_t* pixelData = g_new(uint8_t, width * height * 4);
+        image.write(0, 0, width, height, "BGRA", Magick::CharPixel, pixelData);
 
-        image.type(Magick::TrueColorAlphaType);
-        image.write(0, 0, width, height, "BGRA", Magick::CharPixel, bmp.bitmap);
-
-        bmp.metadata = Metadata(path);
-
-        const char* ext = strrchr(path, '.');
-        if (ext) {
-            if (strcasecmp(ext, ".png") == 0)
-                bmp.type = ImageType::PNG;
-            else if (strcasecmp(ext, ".jpg") == 0 || strcasecmp(ext, ".jpeg") == 0)
-                bmp.type = ImageType::JPEG;
-            else if (strcasecmp(ext, ".bmp") == 0)
-                bmp.type = ImageType::BMP;
-            else if (strcasecmp(ext, ".gif") == 0)
-                bmp.type = ImageType::GIF;
-            else if (strcasecmp(ext, ".tiff") == 0 || strcasecmp(ext, ".tif") == 0)
-                bmp.type = ImageType::TIFF;
-            else if (strcasecmp(ext, ".webp") == 0)
-                bmp.type = ImageType::WEBP;
-        }
-
-        frames.push_back(std::move(bmp));
+        Frame frame(path, pixelData, static_cast<uint32_t>(width), static_cast<uint32_t>(height));
+        frames.push_back(std::move(frame));
         return true;
     } catch (Magick::Exception& error) {
         g_warning("ImageMagick error: %s", error.what());
@@ -1139,50 +1126,76 @@ static bool imagick_read_bitmap_core(const Glib::RefPtr<Gio::File>& file, std::v
     }
 }
 
-static bool imagick_write_bitmap_core(const Frame& frame, Glib::RefPtr<Gio::File> file, uint32_t quality, Glib::RefPtr<Gio::Cancellable>& cancellable)
+static bool imagick_write_bitmap_core(const Frame& frame, GFile* file, uint32_t quality, GCancellable* cancellable)
 {
-    if (!(frame.byte && frame.width && frame.height))
+    if (!(frame.pixels && frame.width && frame.height))
         return false;
-    if (!(ImageType::BMP == frame.type || ImageType::JPEG == frame.type || ImageType::PNG == frame.type)) {
+    const char* path = g_file_peek_path(file);
+    ImageType type = comm_get_type_from_path(path);
+    if (!(ImageType::BMP == type || ImageType::JPEG == type || ImageType::PNG == type)) {
         g_warning("Unsupported image type for ImageMagick write");
         return false;
     }
 
-    try {
-        gsize pixelSize = 0;
-        const void* pixels = frame.byte->get_data(pixelSize);
-        if (pixelSize < frame.width * frame.height * 4)
-            return false;
+    gsize pixelSize = 0;
+    const void* pixels = frame.pixels->get_data(pixelSize);
+    if (pixelSize < frame.width * frame.height * 4)
+        return false;
 
-        Magick::Image image(frame.width, frame.height, "BGRA", Magick::CharPixel, pixels);
-        if (ImageType::JPEG == frame.type && quality > 0) {
+    Magick::Image image;
+    try {
+        image.read(frame.width, frame.height, "BGRA", Magick::CharPixel, pixels);
+        if (ImageType::JPEG == type && quality > 0) {
             int q = std::clamp(static_cast<int>(quality * 100 / 9), 1, 100);
             image.quality(q);
         }
 
-        Magick::Blob blob;
         const char* format = nullptr;
-        if (ImageType::BMP == frame.type)
+        if (ImageType::BMP == type)
             format = "BMP";
-        else if (ImageType::JPEG == frame.type)
+        else if (ImageType::JPEG == type)
             format = "JPEG";
-        else if (ImageType::PNG == frame.type)
+        else if (ImageType::PNG == type)
             format = "PNG";
         image.magick(format);
-        image.write(&blob);
-
-        auto stream = file->replace(cancellable);
-        if (!stream)
-            return false;
-        stream->write(blob.data(), blob.length(), cancellable);
-        return true;
     } catch (Magick::Exception& error) {
-        g_warning("ImageMagick write error: %s", error.what());
+        g_warning("ImageMagick error: %s", error.what());
         return false;
     }
+
+    Magick::Blob blob;
+    try {
+        image.write(&blob);
+    } catch (Magick::Exception& error) {
+        g_warning("ImageMagick error: %s", error.what());
+        return false;
+    }
+
+    GError* err = NULL;
+    bool succ = g_file_replace_contents(file, (const char*)blob.data(), blob.length(), NULL, FALSE, G_FILE_CREATE_NONE, NULL, cancellable, &err);
+    if (!succ) {
+        g_warning("ImageMagick write error: %s", err ? err->message : "Unknown error");
+        g_error_free(err);
+        return false;
+    }
+    return true;
 }
 
-#define comm_read_bitmap_core(file, quality, cancellable) imagick_read_bitmap_core(file, quality, cancellable)
+static std::optional<std::vector<Frame>> comm_read_bitmap_core(const uint8_t* buff, size_t size, const char* path, GCancellable* cancellable)
+{
+    std::vector<Frame> frames;
+    if (!imagick_read_from_memory(buff, size, path, frames)) {
+        return std::nullopt;
+    }
+    GError* err = NULL;
+    frames[0].meta = Metadata::create(buff, size, &err);
+    if (err) {
+        g_warning("Failed to read metadata: %s", err->message);
+        g_error_free(err);
+    }
+    return frames;
+}
+
 #define comm_write_bitmap_core(frame, file, quality, cancellable) imagick_write_bitmap_core(frame, file, quality, cancellable)
 #define comm_write_bitmap_animation_core(frames, file, quality, cancellable) false
 #else
@@ -1751,6 +1764,7 @@ struct App : public Gtk::Window {
         auto dialog = Gtk::FileDialog::create();
         dialog->set_title("Save images to");
         dialog->set_filters(filter);
+        dialog->set_initial_name("new_image.jxl");
         return dialog;
     }
     void open_files()
@@ -1918,13 +1932,11 @@ struct App : public Gtk::Window {
                         wids.anim.duration.set_sensitive();
                         wids.anim.frames.set_sensitive();
                     }
-
+                    state = State::READY;
                     if (succ) {
-                        state = State::READY;
                         wids.status.set_text(Glib::ustring::sprintf("Saved to %s", g_file_peek_path(file)));
                         sys_beep_success();
                     } else {
-                        state = State::NONE;
                         wids.status.set_text("Save failed");
                         sys_beep_error();
                     }
@@ -2043,6 +2055,56 @@ struct App : public Gtk::Window {
         if (idx >= frames.size())
             return;
         update_frame(idx);
+    }
+    void on_info_save()
+    {
+        auto idx = get_current_frame_index();
+        if (idx >= frames.size())
+            return;
+        auto& frame = frames[idx];
+        if (!frame.meta || !frame.meta->have_value())
+            return;
+
+        auto buff = g_file_load_contents_wrap(g_file_new_for_path(frame.path.c_str()), cancellable->gobj());
+        if (!buff) {
+            sys_beep_error();
+            return;
+        }
+
+        GError* err = NULL;
+        auto newBuff = frame.meta->save(buff->buff, buff->size, &err);
+        if (err) {
+            g_warning("Failed to save metadata: %s", err->message);
+            g_error_free(err);
+            sys_beep_error();
+            return;
+        }
+        if (!newBuff) {
+            sys_beep_error();
+            return;
+        }
+
+        auto file = g_file_new_for_path(frame.path.c_str());
+        gsize size = 0;
+        const void* data = newBuff->get_data(size);
+        GError* writeErr = NULL;
+        bool succ = g_file_replace_contents(file, (const char*)data, size, NULL, FALSE, G_FILE_CREATE_NONE, NULL, cancellable->gobj(), &writeErr);
+        g_object_unref(file);
+        if (!succ) {
+            g_warning("Failed to save file: %s", writeErr ? writeErr->message : "Unknown error");
+            if (writeErr)
+                g_error_free(writeErr);
+            sys_beep_error();
+            return;
+        }
+
+        wids.info.remove_css_class("metadata-dirty");
+        wids.status.set_text(Glib::ustring::sprintf("Metadata saved to %s", frame.path.c_str()));
+        sys_beep_success();
+        Glib::signal_timeout().connect_seconds_once([this] {
+            update_status_for_frame(get_current_frame_index());
+        },
+            2);
     }
     void on_file_click()
     {
@@ -2248,6 +2310,7 @@ struct App : public Gtk::Window {
         wids.exif.reset.set_size_request(DEF_ROW_HEIGHT, DEF_ROW_HEIGHT);
         wids.exif.save.set_size_request(DEF_ROW_HEIGHT, DEF_ROW_HEIGHT);
         wids.exif.close.signal_clicked().connect([this]() { set_sidebar_visible(false); });
+        wids.exif.save.signal_clicked().connect([this]() { on_info_save(); });
 
         auto* action = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 5);
         auto* spacer = Gtk::make_managed<Gtk::Label>();
