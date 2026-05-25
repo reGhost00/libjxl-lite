@@ -47,6 +47,9 @@
 #endif
 #define sys_beep_success() MessageBeep(MB_OK)
 #define sys_beep_error() MessageBeep(MB_ICONERROR)
+#else
+#define sys_beep_success() printf("\a")
+#define sys_beep_error()   printf("\a\a") // 响两声表示错误
 #endif
 #pragma region common
 // RAII 包装器：自动释放 g_malloc 分配的内存
