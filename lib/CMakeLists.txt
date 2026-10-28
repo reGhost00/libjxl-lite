@@ -181,3 +181,17 @@ include(jxl_cms.cmake)
 # The jxl library definition.
 include(jxl.cmake)
 include(jxl_threads.cmake)
+
+# The in-tree JPEG codec (lib/jpegli/).
+#
+# `lib/jpegli/` is an independent JPEG encoder/decoder that is API/ABI
+# compatible with libjpeg62.  It is used as the JPEG backend of the unified
+# image wrapper in `wrap/`, but it can also be built stand-alone.
+#
+# Note: this uses the fork-owned cmake/jpegli.cmake instead of the upstream
+# lib/jpegli.cmake, because the latter also builds gtest-based test targets
+# (this fork has no googletest) and may be dropped when syncing upstream.
+option(JPEGXL_ENABLE_JPEGLI "Build the in-tree jpegli JPEG codec" OFF)
+if (JPEGXL_ENABLE_JPEGLI)
+  include(${PROJECT_SOURCE_DIR}/cmake/jpegli.cmake)
+endif()

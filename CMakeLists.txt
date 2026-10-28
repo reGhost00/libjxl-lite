@@ -10,6 +10,7 @@
 cmake_minimum_required(VERSION 4.0)
 project(libjxl_lite LANGUAGES C CXX)
 option(JXLL_BUILD_WITH_TOOLS "build tools" ON)
+option(JXLL_BUILD_WRAP "build the unified JXL/JPEG image wrapper (wrap/)" ON)
 
 set(JPEGXL_ENABLE_SKCMS ON CACHE BOOL "" FORCE)
 
@@ -74,7 +75,18 @@ add_subdirectory(third_party)
 set(JXL_HWY_INCLUDE_DIRS "$<BUILD_INTERFACE:$<TARGET_PROPERTY:$<IF:$<TARGET_EXISTS:hwy::hwy>,hwy::hwy,hwy>,INTERFACE_INCLUDE_DIRECTORIES>>")
 
 # lib 目录
+if (JXLL_BUILD_WRAP)
+  # wrap/ 的 JPEG 后端是 lib/jpegli/，所以 jpegli 必须一起构建。
+  # 不使用 FORCE，用户显式关掉 jpegli 时保留其选择。
+  set(JPEGXL_ENABLE_JPEGLI ON CACHE BOOL "Build the in-tree jpegli JPEG codec")
+  enable_testing()
+endif()
 add_subdirectory(lib)
+
+# 统一图片编解码封装 (wrap/)
+if (JXLL_BUILD_WRAP)
+  add_subdirectory(wrap)
+endif()
 
 if (JXLL_BUILD_WITH_TOOLS)
   add_subdirectory(tools)

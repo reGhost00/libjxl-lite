@@ -1348,6 +1348,10 @@ JxlDecoderProcessInput
 
 ## 11. 当前 fork 里 `jpegli` 的状态判断
 
+> **更新（2026-10）：本节描述的是接入之前的状态。现在 `jpegli` 已经被接进构建，
+> 并作为统一封装 `wrap/`（`jxlimg`）的 JPEG 后端。详见
+> [`docs/wrapper-design.zh-CN.md`](./wrapper-design.zh-CN.md)。**
+
 结合当前仓库结构，可以得出比较明确的结论：
 
 1. `lib/jpegli/` 源码还在
@@ -1456,6 +1460,9 @@ JPEG 则简单检查 SOI 即可，或者直接让 `jpegli_read_header()` 试探�
 
 ## 12.3 如果你真的想在这个 fork 里把两者都构建出来
 
+> **已实现。** 下面这份“最小可行工程路径”就是实际落地的方案，
+> 细节见 [`docs/wrapper-design.zh-CN.md`](./wrapper-design.zh-CN.md)。
+
 可以做，但我建议是“**同仓库双库 + wrapper**”路线，不要改写 libjxl API 语义。
 
 ### 最小可行工程路径
@@ -1471,6 +1478,16 @@ JPEG 则简单检查 SOI 即可，或者直接让 `jpegli_read_header()` 试探�
    - `DetectFormat()`
    - `DecodeImage()`
    - `EncodeImage()`
+
+### 实际落地情况
+
+| 步骤 | 实际做法 |
+|------|----------|
+| 1 | 把 libjpeg-turbo 2.1.5.1 的 3 个头文件 vendor 到 `third_party/libjpeg-turbo/` |
+| 2 | `lib/CMakeLists.txt` 里 `include(${PROJECT_SOURCE_DIR}/cmake/jpegli.cmake)` |
+| 3 | fork 自有的 `cmake/jpegli.cmake` 产出 `jpegli-static`（不建 gtest 测试、不建 `libjpeg.so`） |
+| 4 | 新增 `wrap/` 目录，产出 `jxlimg` 静态库 |
+| 5 | `jxlimg.h` 提供 `jxlimg_load*` / `jxlimg_write*` / `jxlimg_info*` / `jxlimg_set_allocator` 等 stb 风格接口 |
 
 ---
 
