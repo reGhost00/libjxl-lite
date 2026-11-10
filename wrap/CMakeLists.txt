@@ -1,53 +1,38 @@
-# Copyright (c) the JPEG XL Project Authors. All rights reserved.
 #
-# Use of this source code is governed by a BSD-style
-# license that can be found in the LICENSE file.
+#   jxlw
+#   a small unified image codec for JPEG and JPEG XL
+#   with an stb_image like api
 #
-# jxlimg: a small unified image codec for JPEG and JPEG XL, with an
-# stb_image like API.
+# The library wraps libjxl (JXL) and lib/jpegli (JPEG) behind a single pure C
+# API. See jxlw.h for the public interface.
 
-if (NOT TARGET jpegli-static)
-  message(FATAL_ERROR
-    "wrap/ needs the in-tree JPEG codec (lib/jpegli/): enable "
-    "JPEGXL_ENABLE_JPEGLI or JXLL_BUILD_WRAP.")
+if(WIN32)
+    set(JXLW_ARGS WIN32_LEAN_AND_MEAN NOMINMAX)
+    if (JXLW_USE_STD_CALL)
+        list(APPEND JXLW_ARGS JXLW_API_STDCALL)
+    endif()
+else()
+    set(JXLW_ARGS)
 endif()
 
-add_library(jxlimg STATIC
-  jxlimg.cc
-  jxlimg_jpeg.cc
-  jxlimg_jxl.cc
-)
-add_library(jxlimg::jxlimg ALIAS jxlimg)
-
-target_include_directories(jxlimg
-  PUBLIC
-    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
-  PRIVATE
-    "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>"
-)
-
-target_link_libraries(jxlimg
-  PUBLIC jxl
-  PRIVATE jpegli-static
-)
-
-# JPEGXL_INTERNAL_FLAGS is defined in the scope of lib/, which is not
-# visible here, so the wrapper uses its own set of warnings.
-if (NOT MSVC)
-  target_compile_options(jxlimg PRIVATE
-    -Wall
-    -Wextra
-    -Wno-unused-parameter
-    -Wno-missing-field-initializers
-  )
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    list(APPEND JXLW_ARGS JXLW_DEBUG)
 endif()
 
-#
-# Tests
-#
-add_executable(jxlimg_test tests/jxlimg_test.cc)
-target_link_libraries(jxlimg_test PRIVATE jxlimg)
-if (NOT MSVC)
-  target_compile_options(jxlimg_test PRIVATE -Wall -Wextra)
+file(GLOB JXLW_SOURCES "./srcs/*.c" "./srcs/*.cc")
+
+add_library(jxlw STATIC ${JXLW_SOURCES})
+target_compile_definitions(jxlw PRIVATE ${JXLW_ARGS})
+# The public header lives in this directory.
+target_include_directories(jxlw PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+# The jpegli headers are included as "lib/jpegli/...", so the project root has
+# to be on the include path (private, it must not leak to the users).
+target_include_directories(jxlw PRIVATE ${PROJECT_SOURCE_DIR})
+
+# target_link_libraries(jxlw PUBLIC jxl)
+target_link_libraries(jxlw PRIVATE jxl jpegli-static jxl_threads)
+
+
+if (JXLW_BUILD_WITH_TOOLS)
+    add_subdirectory(tools)
 endif()
-add_test(NAME jxlimg_test COMMAND jxlimg_test)

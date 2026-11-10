@@ -2,7 +2,7 @@
 #
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
-
+#
 # 精简版 libjxl 构建配置
 # 仅构建编码/解码器，仅支持 x86 msys2 / gcc / clang
 # 使用内置 skcms，不需要安装和测试
@@ -10,7 +10,10 @@
 cmake_minimum_required(VERSION 4.0)
 project(libjxl_lite LANGUAGES C CXX)
 option(JXLL_BUILD_WITH_TOOLS "build tools" ON)
-option(JXLL_BUILD_WRAP "build the unified JXL/JPEG image wrapper (wrap/)" ON)
+option(JXLL_BUILD_WITH_WRAP "build wrap library" ON)
+
+option(JXLW_USE_STD_CALL "codec export api use __stdcall on window" ON)
+option(JXLW_BUILD_WITH_TOOLS "build wrap tools" ON)
 
 set(JPEGXL_ENABLE_SKCMS ON CACHE BOOL "" FORCE)
 
@@ -46,6 +49,8 @@ if (LIB_HAVE_CXX26_FLAG)
 else()
     set(CMAKE_CXX_STANDARD 17)
 endif()
+set(CMAKE_C_STANDARD 23)
+set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(THREADS_PREFER_PTHREAD_FLAG YES)
 find_package(Threads REQUIRED)
@@ -75,19 +80,12 @@ add_subdirectory(third_party)
 set(JXL_HWY_INCLUDE_DIRS "$<BUILD_INTERFACE:$<TARGET_PROPERTY:$<IF:$<TARGET_EXISTS:hwy::hwy>,hwy::hwy,hwy>,INTERFACE_INCLUDE_DIRECTORIES>>")
 
 # lib 目录
-if (JXLL_BUILD_WRAP)
-  # wrap/ 的 JPEG 后端是 lib/jpegli/，所以 jpegli 必须一起构建。
-  # 不使用 FORCE，用户显式关掉 jpegli 时保留其选择。
-  set(JPEGXL_ENABLE_JPEGLI ON CACHE BOOL "Build the in-tree jpegli JPEG codec")
-  enable_testing()
-endif()
 add_subdirectory(lib)
-
-# 统一图片编解码封装 (wrap/)
-if (JXLL_BUILD_WRAP)
-  add_subdirectory(wrap)
-endif()
 
 if (JXLL_BUILD_WITH_TOOLS)
   add_subdirectory(tools)
+endif()
+
+if (JXLL_BUILD_WITH_WRAP)
+  add_subdirectory(wrap)
 endif()
